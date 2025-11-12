@@ -156,6 +156,9 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 	c.ap.ClearScreen()
 	toDelete := make(map[int]bool)
 	for i, s := range *streaks {
+		if randomNum(20) <= 1 {
+			s.doneGrowing = true
+		}
 		lengthChars := len(s.chars)
 		if s.x < c.ap.H {
 			c.ap.WriteFg(White.Color())
@@ -164,11 +167,11 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 		}
 		for j := lengthChars - 1; j > -1; j-- {
 			char := s.chars[lengthChars-j-1]
-			nClr := BrightGreen
-			nClr.G -= uint8((lengthChars - j))
-			if nClr.G < 35 {
+			clr := BrightGreen
+			clr.G -= uint8((lengthChars - j))
+			if clr.G < 35 {
 				c.ap.MoveCursor(s.y, s.x-(lengthChars-j)-1)
-				c.ap.WriteFg(nClr.Color())
+				c.ap.WriteFg(clr.Color())
 				c.ap.WriteRune(' ')
 				if s.x-(lengthChars-j)-1 >= c.ap.H {
 					toDelete[i] = true
@@ -179,11 +182,14 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 				continue
 			}
 			c.ap.MoveCursor(s.y, s.x-j-1)
-			c.ap.WriteFg(nClr.Color())
+			c.ap.WriteFg(clr.Color())
 			c.ap.WriteRune(char)
 		}
 		s.x++
 		s.newChar()
+		if s.doneGrowing {
+			s.chars = s.chars[1:]
+		}
 
 		(*streaks)[i] = s
 

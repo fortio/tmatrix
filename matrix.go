@@ -50,8 +50,9 @@ func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 }
 
 type singleThreadStreak struct {
-	chars []rune
-	x, y  int
+	chars       []rune
+	x, y        int
+	doneGrowing bool
 }
 
 func (sts *singleThreadStreak) newChar() {
@@ -63,6 +64,7 @@ func (m *matrix) newSingleThreadedStreak() singleThreadStreak {
 		[]rune{rune(randomNum(128) + 8)},
 		0, randomNum(int32(m.maxY)), //nolint:gosec // Only would overflow if terminal size is massive
 		// randomNum(int32(m.maxX)), randomNum(int32(m.maxY)), //nolint:gosec // Only would overflow if terminal size is massive
+		false,
 	}
 	return s
 }
