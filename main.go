@@ -1,99 +1,117 @@
-// tmatrix
-// Simulate the matrix effect in your terminal
-
 package main
 
 import (
+	"context"
 	"flag"
-	"os"
-	"runtime/pprof"
+	"fmt"
+	"math/rand"
+	"runtime"
 
-	"fortio.org/cli"
-	"fortio.org/log"
 	"fortio.org/terminal/ansipixels"
+	"fortio.org/terminal/ansipixels/tcolor"
 )
 
+type config struct {
+	ap     *ansipixels.AnsiPixels
+	matrix matrix
+	cells  [][]cell
+	freq   int
+	speed  int
+}
+
+type cell struct {
+	char  rune
+	shade tcolor.RGBColor
+}
+
+var BrightGreen = tcolor.RGBColor{R: 0, G: 255, B: 0}
+
+func configure(fps float64, freq, speed int) *config {
+	c := config{ansipixels.NewAnsiPixels(fps), matrix{streaks: make(chan streak)}, nil, freq, speed}
+	c.ap.Open()
+	c.ap.GetSize()
+	c.ap.ClearScreen()
+	c.matrix.maxX = c.ap.H
+	c.matrix.maxY = c.ap.W
+	c.cells = make([][]cell, c.matrix.maxX+1)
+	for i := range c.cells {
+		c.cells[i] = make([]cell, c.matrix.maxY+1)
+	}
+	return &c
+}
+
+func (c *config) resizeConfigure() {
+	*c = config{ap: c.ap, matrix: matrix{streaks: make(chan streak)}, cells: nil, freq: c.freq, speed: c.speed}
+	c.ap.Open()
+	c.ap.GetSize()
+	c.ap.ClearScreen()
+	c.matrix.maxX = c.ap.H
+	c.matrix.maxY = c.ap.W
+	c.cells = make([][]cell, c.matrix.maxX+1)
+	for i := range c.cells {
+		c.cells[i] = make([]cell, c.matrix.maxY+1)
+	}
+}
+
 func main() {
-	os.Exit(Main())
-}
-
-type State struct {
-	ap *ansipixels.AnsiPixels
-}
-
-func Main() int {
-	truecolorDefault := ansipixels.DetectColorMode().TrueColor
-	fTrueColor := flag.Bool("truecolor", truecolorDefault,
-		"Use true color (24-bit RGB) instead of 8-bit ANSI colors (default is true if COLORTERM is set)")
-	fCpuprofile := flag.String("profile-cpu", "", "write cpu profile to `file`")
-	fMemprofile := flag.String("profile-mem", "", "write memory profile to `file`")
-	fFPS := flag.Float64("fps", 60, "Frames per second (ansipixels rendering)")
-	cli.Main()
-	if *fCpuprofile != "" {
-		f, err := os.Create(*fCpuprofile)
-		if err != nil {
-			return log.FErrf("can't open file for cpu profile: %v", err)
-		}
-		err = pprof.StartCPUProfile(f)
-		if err != nil {
-			return log.FErrf("can't start cpu profile: %v", err)
-		}
-		log.Infof("Writing cpu profile to %s", *fCpuprofile)
-		defer pprof.StopCPUProfile()
-	}
-	ap := ansipixels.NewAnsiPixels(*fFPS)
-	st := &State{
-		ap: ap,
-	}
-	ap.TrueColor = *fTrueColor
-	if err := ap.Open(); err != nil {
-		return 1 // error already logged
-	}
-	defer ap.Restore()
-	ap.SyncBackgroundColor()
-	ap.OnResize = func() error {
-		ap.ClearScreen()
-		ap.StartSyncMode()
-		// Redraw/resize/do something here:
-		ap.WriteBoxed(ap.H/2-1, "Welcome to tmatrix!\n%dx%d\nQ to quit.", ap.W, ap.H)
-		// ...
-		ap.EndSyncMode()
+	maxProcs := int32(runtime.GOMAXPROCS(-1))
+	fpsFlag := flag.Float64("fps", 60., "adjust the frames per second")
+	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
+	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
+	flag.Parse()
+	c := configure(*fpsFlag, *freqFlag, *speedFlag)
+	ctx, cancel := context.WithCancel(context.Background())
+	hits, newStreaks := 0, 0
+	c.ap.HideCursor()
+	defer func() {
+		c.ap.ClearScreen()
+		c.ap.ShowCursor()
+		c.ap.MoveCursor(0, 0)
+		c.ap.Restore()
+		cancel()
+	}()
+	c.ap.OnResize = func() error {
+		c.resizeConfigure()
 		return nil
 	}
-	_ = ap.OnResize()   // initial draw.
-	ap.AutoSync = false // for cursor to blink on splash screen. remove if not wanted.
-	err := ap.FPSTicks(st.Tick)
-	if *fMemprofile != "" {
-		f, errMP := os.Create(*fMemprofile)
-		if errMP != nil {
-			return log.FErrf("can't open file for mem profile: %v", errMP)
+	c.ap.SyncBackgroundColor()
+	c.ap.OnResize()
+	c.ap.FPSTicks(func() bool {
+		c.ap.GetSize()
+		if c.matrix.maxX != c.ap.H || c.matrix.maxY != c.ap.W {
+			c.ap.OnResize()
 		}
-		errMP = pprof.WriteHeapProfile(f)
-		if errMP != nil {
-			return log.FErrf("can't write mem profile: %v", err)
+		select {
+		case streak := <-c.matrix.streaks:
+			hits++
+			c.cells[streak.x][streak.y].shade = BrightGreen
+			c.cells[streak.x][streak.y].char = streak.char
+		default:
 		}
-		log.Infof("Wrote memory profile to %s", *fMemprofile)
-		_ = f.Close()
-	}
-	if err != nil {
-		log.Infof("Exiting on %v", err)
-		return 1
-	}
-	return 0
+		c.shadeCells()
+		num := rand.Intn(100)
+		if num <= c.freq && c.matrix.streaksActive.Load() < maxProcs {
+			c.matrix.newStreak(ctx, c.speed)
+			newStreaks++
+		}
+		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
+			return false
+		}
+		return true
+	})
+	fmt.Println(len(c.matrix.streaks))
 }
 
-func (st *State) Tick() bool {
-	if len(st.ap.Data) == 0 {
-		return true
+func (c *config) shadeCells() {
+	for i, row := range c.cells[:len(c.cells)-1] {
+		for j, cell := range row[:len(row)-1] {
+			if cell.shade.G <= 35 {
+				c.ap.WriteAt(j, i, " ")
+				continue
+			}
+			c.cells[i][j].shade.G--
+			c.ap.WriteFg(c.cells[i][j].shade.Color())
+			c.ap.WriteAt(j, i, "%s", string(cell.char))
+		}
 	}
-	c := st.ap.Data[0]
-	switch c {
-	case 'q', 'Q', 3: // Ctrl-C
-		log.Infof("Exiting on %q", c)
-		return false
-	default:
-		log.Debugf("Input %q...", c)
-		// Do something
-	}
-	return true
 }
