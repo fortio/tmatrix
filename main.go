@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"runtime"
 
 	"fortio.org/terminal/ansipixels"
@@ -29,27 +29,8 @@ var (
 	White       = tcolor.RGBColor{R: 255, G: 255, B: 255}
 )
 
-func configure(fps float64, freq, speed int) *config {
-	c := config{ansipixels.NewAnsiPixels(fps), matrix{streaks: make(chan streak)}, nil, freq, speed}
-	err := c.ap.Open()
-	if err != nil {
-		panic("can't open")
-	}
-	c.ap.ClearScreen()
-	c.matrix.maxX = c.ap.H
-	c.matrix.maxY = c.ap.W
-	c.cells = make([][]cell, c.matrix.maxX+1)
-	for i := range c.cells {
-		c.cells[i] = make([]cell, c.matrix.maxY+1)
-	}
-	return &c
-}
-
 func (c *config) resizeConfigure() {
 	*c = config{ap: c.ap, matrix: matrix{streaks: make(chan streak)}, cells: nil, freq: c.freq, speed: c.speed}
-	c.ap.Open()
-	c.ap.GetSize()
-	c.ap.ClearScreen()
 	c.matrix.maxX = c.ap.H
 	c.matrix.maxY = c.ap.W
 	c.cells = make([][]cell, c.matrix.maxX+1)
@@ -64,7 +45,7 @@ func main() {
 	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
 	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
 	flag.Parse()
-	c := configure(*fpsFlag, *freqFlag, *speedFlag)
+	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag}
 	ctx, cancel := context.WithCancel(context.Background())
 	hits, newStreaks := 0, 0
 	c.ap.HideCursor()
@@ -76,11 +57,14 @@ func main() {
 		cancel()
 	}()
 	c.ap.OnResize = func() error {
+		c.ap.Open()
+		c.ap.GetSize()
+		c.ap.ClearScreen()
 		c.resizeConfigure()
 		return nil
 	}
-	c.ap.SyncBackgroundColor()
 	_ = c.ap.OnResize()
+	c.ap.SyncBackgroundColor()
 	c.ap.FPSTicks(func() bool {
 		select {
 		case streak := <-c.matrix.streaks:
@@ -90,7 +74,7 @@ func main() {
 		default:
 		}
 		c.shadeCells()
-		num := rand.Intn(100)
+		num := int(rand.Int32N(100))
 		if num <= c.freq && c.matrix.streaksActive.Load() < maxProcs {
 			c.matrix.newStreak(ctx, c.speed)
 			newStreaks++
