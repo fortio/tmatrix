@@ -19,8 +19,11 @@ type matrix struct {
 }
 
 func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
-	s := streak{rand.Intn(m.maxX), rand.Intn(m.maxY), rune(rand.Intn(128) + 8)} //nolint:gosec // good enough for random effect
-	speed := rand.Intn(100)                                                     //nolint:gosec // good enough for random effect
+	s := streak{
+		randomNum(int32(m.maxX)), randomNum(int32(m.maxY)), //nolint:gosec // Only would overflow if terminal size is massive
+		rune(randomNum(128) + 8),
+	}
+	speed := randomNum(100)
 	timeBetween := max(time.Duration(speed*int(time.Millisecond)/speedDividend), 10)
 	m.streaksActive.Add(1)
 	go func() {

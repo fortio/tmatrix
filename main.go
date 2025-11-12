@@ -80,7 +80,7 @@ func main() {
 		default:
 		}
 		c.shadeCells()
-		num := int(rand.Int32N(100)) //nolint:gosec //good enough for random effect
+		num := randomNum(100)
 		if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
 			c.matrix.newStreak(ctx, c.speed)
 			newStreaks++
@@ -108,4 +108,8 @@ func (c *config) shadeCells() {
 			c.ap.WriteRune(cell.char)
 		}
 	}
+}
+
+func randomNum(maxValue int32) int {
+	return int(rand.Int32N(maxValue)) //nolint:gosec //good enough for random effect
 }
