@@ -75,7 +75,7 @@ func main() {
 		select {
 		case streakTick := <-c.matrix.streaks:
 			hits++
-			c.cells[streakTick.x][streakTick.y].shade = BrightGreen
+			c.cells[streakTick.x][streakTick.y].shade = White
 			c.cells[streakTick.x][streakTick.y].char = streakTick.char
 		default:
 		}
@@ -101,6 +101,10 @@ func (c *config) shadeCells() {
 			if cell.shade.G <= 35 {
 				c.ap.WriteAt(j, i, " ")
 				continue
+			}
+			if cell.shade.B > 0 {
+				c.cells[i][j].shade.B -= 15
+				c.cells[i][j].shade.R -= 15
 			}
 			c.cells[i][j].shade.G--
 			c.ap.WriteFg(c.cells[i][j].shade.Color())
