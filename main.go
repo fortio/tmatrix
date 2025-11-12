@@ -1,99 +1,119 @@
-// tmatrix
-// Simulate the matrix effect in your terminal
-
 package main
 
 import (
+	"context"
 	"flag"
-	"os"
-	"runtime/pprof"
+	"fmt"
+	"math/rand/v2"
+	"runtime"
 
-	"fortio.org/cli"
-	"fortio.org/log"
 	"fortio.org/terminal/ansipixels"
+	"fortio.org/terminal/ansipixels/tcolor"
 )
 
+type config struct {
+	ap     *ansipixels.AnsiPixels
+	matrix matrix
+	cells  [][]cell
+	freq   int
+	speed  int
+}
+
+type cell struct {
+	char  rune
+	shade tcolor.RGBColor
+}
+
+var (
+	BrightGreen = tcolor.RGBColor{R: 0, G: 255, B: 0}
+	White       = tcolor.RGBColor{R: 255, G: 255, B: 255}
+)
+
+func (c *config) resizeConfigure() {
+	*c = config{ap: c.ap, matrix: matrix{streaks: make(chan streak)}, cells: nil, freq: c.freq, speed: c.speed}
+	c.matrix.maxX = c.ap.H
+	c.matrix.maxY = c.ap.W
+	c.cells = make([][]cell, c.matrix.maxX+1)
+	for i := range c.cells {
+		c.cells[i] = make([]cell, c.matrix.maxY+1)
+	}
+}
+
 func main() {
-	os.Exit(Main())
-}
+	maxProcs := (runtime.GOMAXPROCS(-1))
+	fpsFlag := flag.Float64("fps", 60., "adjust the frames per second")
+	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
+	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
+	flag.Parse()
+	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag}
+	ctx, cancel := context.WithCancel(context.Background())
+	hits, newStreaks := 0, 0
+	var errorMessage string
+	c.ap.HideCursor()
+	defer func() {
+		c.ap.ClearScreen()
+		c.ap.ShowCursor()
+		c.ap.MoveCursor(0, 0)
+		c.ap.Restore()
+		cancel()
+		fmt.Println(errorMessage)
+	}()
 
-type State struct {
-	ap *ansipixels.AnsiPixels
-}
-
-func Main() int {
-	truecolorDefault := ansipixels.DetectColorMode().TrueColor
-	fTrueColor := flag.Bool("truecolor", truecolorDefault,
-		"Use true color (24-bit RGB) instead of 8-bit ANSI colors (default is true if COLORTERM is set)")
-	fCpuprofile := flag.String("profile-cpu", "", "write cpu profile to `file`")
-	fMemprofile := flag.String("profile-mem", "", "write memory profile to `file`")
-	fFPS := flag.Float64("fps", 60, "Frames per second (ansipixels rendering)")
-	cli.Main()
-	if *fCpuprofile != "" {
-		f, err := os.Create(*fCpuprofile)
-		if err != nil {
-			return log.FErrf("can't open file for cpu profile: %v", err)
-		}
-		err = pprof.StartCPUProfile(f)
-		if err != nil {
-			return log.FErrf("can't start cpu profile: %v", err)
-		}
-		log.Infof("Writing cpu profile to %s", *fCpuprofile)
-		defer pprof.StopCPUProfile()
-	}
-	ap := ansipixels.NewAnsiPixels(*fFPS)
-	st := &State{
-		ap: ap,
-	}
-	ap.TrueColor = *fTrueColor
-	if err := ap.Open(); err != nil {
-		return 1 // error already logged
-	}
-	defer ap.Restore()
-	ap.SyncBackgroundColor()
-	ap.OnResize = func() error {
-		ap.ClearScreen()
-		ap.StartSyncMode()
-		// Redraw/resize/do something here:
-		ap.WriteBoxed(ap.H/2-1, "Welcome to tmatrix!\n%dx%d\nQ to quit.", ap.W, ap.H)
-		// ...
-		ap.EndSyncMode()
+	c.ap.OnResize = func() error {
+		c.ap.ClearScreen()
+		c.resizeConfigure()
 		return nil
 	}
-	_ = ap.OnResize()   // initial draw.
-	ap.AutoSync = false // for cursor to blink on splash screen. remove if not wanted.
-	err := ap.FPSTicks(st.Tick)
-	if *fMemprofile != "" {
-		f, errMP := os.Create(*fMemprofile)
-		if errMP != nil {
-			return log.FErrf("can't open file for mem profile: %v", errMP)
-		}
-		errMP = pprof.WriteHeapProfile(f)
-		if errMP != nil {
-			return log.FErrf("can't write mem profile: %v", err)
-		}
-		log.Infof("Wrote memory profile to %s", *fMemprofile)
-		_ = f.Close()
-	}
+	err := c.ap.Open()
 	if err != nil {
-		log.Infof("Exiting on %v", err)
-		return 1
+		errorMessage = ("can't open")
 	}
-	return 0
+
+	_ = c.ap.OnResize()
+	c.ap.SyncBackgroundColor()
+	err = c.ap.FPSTicks(func() bool {
+		select {
+		case streakTick := <-c.matrix.streaks:
+			hits++
+			c.cells[streakTick.x][streakTick.y].shade = White
+			c.cells[streakTick.x][streakTick.y].char = streakTick.char
+		default:
+		}
+		c.shadeCells()
+		num := randomNum(100)
+		if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
+			c.matrix.newStreak(ctx, c.speed)
+			newStreaks++
+		}
+		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		errorMessage = fmt.Sprintf("error calling fpsticks: %s", err)
+	}
 }
 
-func (st *State) Tick() bool {
-	if len(st.ap.Data) == 0 {
-		return true
+func (c *config) shadeCells() {
+	for i, row := range c.cells[:len(c.cells)-1] {
+		for j, cell := range row[:len(row)-1] {
+			if cell.shade.G <= 35 {
+				c.ap.WriteAt(j, i, " ")
+				continue
+			}
+			if cell.shade.B > 0 {
+				c.cells[i][j].shade.B -= 15
+				c.cells[i][j].shade.R -= 15
+			}
+			c.cells[i][j].shade.G--
+			c.ap.WriteFg(c.cells[i][j].shade.Color())
+			c.ap.MoveCursor(j, i)
+			c.ap.WriteRune(cell.char)
+		}
 	}
-	c := st.ap.Data[0]
-	switch c {
-	case 'q', 'Q', 3: // Ctrl-C
-		log.Infof("Exiting on %q", c)
-		return false
-	default:
-		log.Debugf("Input %q...", c)
-		// Do something
-	}
-	return true
+}
+
+func randomNum(maxValue int32) int {
+	return int(rand.Int32N(maxValue)) //nolint:gosec //good enough for random effect
 }
