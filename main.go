@@ -96,7 +96,8 @@ func (c *config) shadeCells() {
 			}
 			c.cells[i][j].shade.G--
 			c.ap.WriteFg(c.cells[i][j].shade.Color())
-			c.ap.WriteAt(j, i, "%s", string(cell.char))
+			c.ap.MoveCursor(j, i)
+			c.ap.WriteRune(cell.char)
 		}
 	}
 }
