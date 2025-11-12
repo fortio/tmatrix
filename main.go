@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"runtime"
+	"slices"
 
 	"fortio.org/terminal/ansipixels"
 	"fortio.org/terminal/ansipixels/tcolor"
@@ -17,6 +18,8 @@ type config struct {
 	cells  [][]cell
 	freq   int
 	speed  int
+	fade   bool
+	paused bool
 }
 
 type cell struct {
@@ -30,7 +33,7 @@ var (
 )
 
 func (c *config) resizeConfigure() {
-	*c = config{ap: c.ap, matrix: matrix{streaks: make(chan streak)}, cells: nil, freq: c.freq, speed: c.speed}
+	*c = config{ap: c.ap, matrix: matrix{streaks: make(chan streak)}, cells: nil, freq: c.freq, speed: c.speed, fade: c.fade}
 	c.matrix.maxX = c.ap.H
 	c.matrix.maxY = c.ap.W
 	c.cells = make([][]cell, c.matrix.maxX+1)
@@ -44,8 +47,9 @@ func main() {
 	fpsFlag := flag.Float64("fps", 60., "adjust the frames per second")
 	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
 	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
+	fadeFlag := flag.Bool("fade", false, "toggle whether the letters will fade away")
 	flag.Parse()
-	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag}
+	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag, fade: *fadeFlag}
 	ctx, cancel := context.WithCancel(context.Background())
 	hits, newStreaks := 0, 0
 	var errorMessage string
@@ -71,6 +75,36 @@ func main() {
 
 	_ = c.ap.OnResize()
 	c.ap.SyncBackgroundColor()
+
+	if !c.fade {
+		streaks := make([]singleThreadStreak, 0)
+		err = c.ap.FPSTicks(func() bool {
+			if !c.paused {
+				c.drawAndIncrement(&streaks)
+			}
+			if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
+				return false
+			}
+			if len(c.ap.Data) > 0 && c.ap.Data[0] == ' ' {
+				c.paused = !c.paused
+				return true
+			}
+			if c.paused {
+				return true
+			}
+			num := randomNum(100)
+			if num <= c.freq {
+				streaks = append(streaks, c.matrix.newSingleThreadedStreak())
+				newStreaks++
+			}
+			return true
+		})
+		if err != nil {
+			errorMessage = fmt.Sprintf("error calling fpsticks: %s", err)
+		}
+		return
+	}
+
 	err = c.ap.FPSTicks(func() bool {
 		select {
 		case streakTick := <-c.matrix.streaks:
@@ -116,4 +150,51 @@ func (c *config) shadeCells() {
 
 func randomNum(maxValue int32) int {
 	return int(rand.Int32N(maxValue)) //nolint:gosec //good enough for random effect
+}
+
+func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
+	c.ap.ClearScreen()
+	toDelete := make(map[int]bool)
+	for i, s := range *streaks {
+		lengthChars := len(s.chars)
+		if s.x < c.ap.H {
+			c.ap.WriteFg(White.Color())
+			c.ap.MoveCursor(s.y, s.x)
+			c.ap.WriteRune(s.chars[lengthChars-1])
+		}
+		for j := lengthChars - 1; j > -1; j-- {
+			char := s.chars[lengthChars-j-1]
+			nClr := BrightGreen
+			nClr.G -= uint8((lengthChars - j))
+			if nClr.G < 35 {
+				c.ap.MoveCursor(s.y, s.x-(lengthChars-j)-1)
+				c.ap.WriteFg(nClr.Color())
+				c.ap.WriteRune(' ')
+				if s.x-(lengthChars-j)-1 >= c.ap.H {
+					toDelete[i] = true
+				}
+				continue
+			}
+			if s.x-(lengthChars-j)-1 >= c.ap.H || s.x-1-(lengthChars-j) < 0 || s.x-j-1 >= c.ap.H {
+				continue
+			}
+			c.ap.MoveCursor(s.y, s.x-j-1)
+			c.ap.WriteFg(nClr.Color())
+			c.ap.WriteRune(char)
+		}
+		s.x++
+		s.newChar()
+
+		(*streaks)[i] = s
+
+	}
+	tdKeys := make([]int, 0, len(toDelete))
+	for num := range toDelete {
+		tdKeys = append(tdKeys, num)
+	}
+
+	slices.SortFunc(tdKeys, func(a, b int) int { return b - a })
+	for _, n := range tdKeys {
+		*streaks = slices.Delete(*streaks, n, n+1)
+	}
 }
