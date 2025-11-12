@@ -24,12 +24,17 @@ type cell struct {
 	shade tcolor.RGBColor
 }
 
-var BrightGreen = tcolor.RGBColor{R: 0, G: 255, B: 0}
+var (
+	BrightGreen = tcolor.RGBColor{R: 0, G: 255, B: 0}
+	White       = tcolor.RGBColor{R: 255, G: 255, B: 255}
+)
 
 func configure(fps float64, freq, speed int) *config {
 	c := config{ansipixels.NewAnsiPixels(fps), matrix{streaks: make(chan streak)}, nil, freq, speed}
-	c.ap.Open()
-	c.ap.GetSize()
+	err := c.ap.Open()
+	if err != nil {
+		panic("can't open")
+	}
 	c.ap.ClearScreen()
 	c.matrix.maxX = c.ap.H
 	c.matrix.maxY = c.ap.W
@@ -75,12 +80,8 @@ func main() {
 		return nil
 	}
 	c.ap.SyncBackgroundColor()
-	c.ap.OnResize()
+	_ = c.ap.OnResize()
 	c.ap.FPSTicks(func() bool {
-		c.ap.GetSize()
-		if c.matrix.maxX != c.ap.H || c.matrix.maxY != c.ap.W {
-			c.ap.OnResize()
-		}
 		select {
 		case streak := <-c.matrix.streaks:
 			hits++
