@@ -1,5 +1,5 @@
-// NAME
-// DESCRIPTION
+// tmatrix
+// Simulate the matrix effect in your terminal
 
 package main
 
@@ -55,7 +55,7 @@ func Main() int {
 		ap.ClearScreen()
 		ap.StartSyncMode()
 		// Redraw/resize/do something here:
-		ap.WriteBoxed(ap.H/2-1, "Welcome to NAME!\n%dx%d\nQ to quit.", ap.W, ap.H)
+		ap.WriteBoxed(ap.H/2-1, "Welcome to tmatrix!\n%dx%d\nQ to quit.", ap.W, ap.H)
 		// ...
 		ap.EndSyncMode()
 		return nil
