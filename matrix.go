@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"math/rand"
 	"sync/atomic"
 	"time"
 )
@@ -41,7 +40,7 @@ func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 					return
 				}
 				// number between 33 and 126 = nice ascii char
-				s.char = rune(rand.Intn(127-33) + 33) //nolint:gosec // good enough for random effect
+				s.char = rune(randomNum(127-33) + 33)
 				m.streaks <- s
 			case <-ctx.Done():
 				return
