@@ -43,7 +43,6 @@ func (c *config) resizeConfigure() {
 }
 
 func main() {
-	maxProcs := (runtime.GOMAXPROCS(-1))
 	fpsFlag := flag.Float64("fps", 60., "adjust the frames per second")
 	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
 	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
@@ -51,7 +50,7 @@ func main() {
 	flag.Parse()
 	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag, fade: *fadeFlag}
 	ctx, cancel := context.WithCancel(context.Background())
-	hits, newStreaks := 0, 0
+	// hits, newStreaks := 0, 0
 	var errorMessage string
 	c.ap.HideCursor()
 	defer func() {
@@ -74,61 +73,10 @@ func main() {
 	_ = c.ap.OnResize()
 	c.ap.SyncBackgroundColor()
 	if !c.fade {
-		streaks := make([]singleThreadStreak, 0)
-		err = c.ap.FPSTicks(func() bool {
-			if !c.paused {
-				c.drawAndIncrement(&streaks)
-			}
-			if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
-				return false
-			}
-			if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
-				c.paused = !c.paused
-				return true
-			}
-			if c.paused {
-				return true
-			}
-			num := randomNum(100)
-			if num <= c.freq {
-				streaks = append(streaks, c.matrix.newSingleThreadedStreak())
-				newStreaks++
-			}
-			return true
-		})
-		if err != nil {
-			errorMessage = fmt.Sprintf("error calling fpsticks: %s", err)
-		}
+		errorMessage = c.RunAsync()
 		return
 	}
-	err = c.ap.FPSTicks(func() bool {
-		if !c.paused {
-			select {
-			case streakTick := <-c.matrix.streaks:
-				hits++
-				c.cells[streakTick.x][streakTick.y].shade = White
-				c.cells[streakTick.x][streakTick.y].char = streakTick.char
-			default:
-			}
-			c.shadeCells()
-			num := randomNum(100)
-			if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
-				c.matrix.newStreak(ctx, c.speed)
-				newStreaks++
-			}
-		}
-		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
-			c.paused = !c.paused
-			return true
-		}
-		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
-			return false
-		}
-		return true
-	})
-	if err != nil {
-		errorMessage = fmt.Sprintf("error calling fpsticks: %s", err)
-	}
+	errorMessage = c.Run(ctx)
 }
 
 func (c *config) shadeCells() {
@@ -170,7 +118,8 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 		for j := lengthChars - 1; j > -1; j-- {
 			char := s.chars[lengthChars-j-1]
 			clr := BrightGreen
-			clr.G -= uint8((lengthChars - j))
+			overflowCheck := min(max(0, lengthChars-j), 255)
+			clr.G -= uint8(overflowCheck) //nolint:gosec // see line above
 			if clr.G < 35 {
 				c.ap.MoveCursor(s.y, s.x-(lengthChars-j)-1)
 				c.ap.WriteFg(clr.Color())
@@ -194,7 +143,6 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 		}
 
 		(*streaks)[i] = s
-
 	}
 	tdKeys := make([]int, 0, len(toDelete))
 	for num := range toDelete {
@@ -205,4 +153,63 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 	for _, n := range tdKeys {
 		*streaks = slices.Delete(*streaks, n, n+1)
 	}
+}
+
+func (c *config) RunAsync() string {
+	streaks := make([]singleThreadStreak, 0)
+	err := c.ap.FPSTicks(func() bool {
+		if !c.paused {
+			c.drawAndIncrement(&streaks)
+		}
+		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
+			return false
+		}
+		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
+			c.paused = !c.paused
+			return true
+		}
+		if c.paused {
+			return true
+		}
+		num := randomNum(100)
+		if num <= c.freq {
+			streaks = append(streaks, c.matrix.newSingleThreadedStreak())
+		}
+		return true
+	})
+	if err != nil {
+		return fmt.Sprintf("error calling fpsticks: %s", err)
+	}
+	return ""
+}
+
+func (c *config) Run(ctx context.Context) string {
+	maxProcs := runtime.GOMAXPROCS(-1)
+	err := c.ap.FPSTicks(func() bool {
+		if !c.paused {
+			select {
+			case streakTick := <-c.matrix.streaks:
+				c.cells[streakTick.x][streakTick.y].shade = White
+				c.cells[streakTick.x][streakTick.y].char = streakTick.char
+			default:
+			}
+			c.shadeCells()
+			num := randomNum(100)
+			if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
+				c.matrix.newStreak(ctx, c.speed)
+			}
+		}
+		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
+			c.paused = !c.paused
+			return true
+		}
+		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return fmt.Sprintf("error calling fpsticks: %s", err)
+	}
+	return ""
 }
