@@ -62,7 +62,6 @@ func main() {
 		cancel()
 		fmt.Println(errorMessage)
 	}()
-
 	c.ap.OnResize = func() error {
 		c.ap.ClearScreen()
 		c.resizeConfigure()
@@ -72,10 +71,8 @@ func main() {
 	if err != nil {
 		errorMessage = ("can't open")
 	}
-
 	_ = c.ap.OnResize()
 	c.ap.SyncBackgroundColor()
-
 	if !c.fade {
 		streaks := make([]singleThreadStreak, 0)
 		err = c.ap.FPSTicks(func() bool {
@@ -85,7 +82,7 @@ func main() {
 			if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
 				return false
 			}
-			if len(c.ap.Data) > 0 && c.ap.Data[0] == ' ' {
+			if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
 				c.paused = !c.paused
 				return true
 			}
@@ -104,20 +101,25 @@ func main() {
 		}
 		return
 	}
-
 	err = c.ap.FPSTicks(func() bool {
-		select {
-		case streakTick := <-c.matrix.streaks:
-			hits++
-			c.cells[streakTick.x][streakTick.y].shade = White
-			c.cells[streakTick.x][streakTick.y].char = streakTick.char
-		default:
+		if !c.paused {
+			select {
+			case streakTick := <-c.matrix.streaks:
+				hits++
+				c.cells[streakTick.x][streakTick.y].shade = White
+				c.cells[streakTick.x][streakTick.y].char = streakTick.char
+			default:
+			}
+			c.shadeCells()
+			num := randomNum(100)
+			if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
+				c.matrix.newStreak(ctx, c.speed)
+				newStreaks++
+			}
 		}
-		c.shadeCells()
-		num := randomNum(100)
-		if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
-			c.matrix.newStreak(ctx, c.speed)
-			newStreaks++
+		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
+			c.paused = !c.paused
+			return true
 		}
 		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
 			return false
@@ -156,10 +158,10 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 	c.ap.ClearScreen()
 	toDelete := make(map[int]bool)
 	for i, s := range *streaks {
-		if randomNum(20) <= 1 {
+		lengthChars := len(s.chars)
+		if lengthChars > 5 && randomNum(20) <= 1 {
 			s.doneGrowing = true
 		}
-		lengthChars := len(s.chars)
 		if s.x < c.ap.H {
 			c.ap.WriteFg(White.Color())
 			c.ap.MoveCursor(s.y, s.x)
