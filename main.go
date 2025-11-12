@@ -44,13 +44,12 @@ func (c *config) resizeConfigure() {
 
 func main() {
 	fpsFlag := flag.Float64("fps", 60., "adjust the frames per second")
-	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
-	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
+	freqFlag := flag.Int("freq", 100, "adjust the percent chance each frame that a new column is spawned in")
+	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks - only affects speed when -fade flag is used")
 	fadeFlag := flag.Bool("fade", false, "toggle whether the letters will fade away")
 	flag.Parse()
 	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag, fade: *fadeFlag}
 	ctx, cancel := context.WithCancel(context.Background())
-	// hits, newStreaks := 0, 0
 	var errorMessage string
 	c.ap.HideCursor()
 	defer func() {
@@ -72,11 +71,11 @@ func main() {
 	}
 	_ = c.ap.OnResize()
 	c.ap.SyncBackgroundColor()
-	if !c.fade {
-		errorMessage = c.RunAsync()
+	if c.fade {
+		errorMessage = c.RunAsync(ctx)
 		return
 	}
-	errorMessage = c.Run(ctx)
+	errorMessage = c.Run()
 }
 
 func (c *config) shadeCells() {
@@ -99,7 +98,7 @@ func (c *config) shadeCells() {
 }
 
 func randomNum(maxValue int32) int {
-	return int(rand.Int32N(maxValue)) //nolint:gosec //good enough for random effect
+	return int(rand.Int32N(maxValue)) //nolint:gosec // good enough for random effect
 }
 
 func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
@@ -148,14 +147,13 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 	for num := range toDelete {
 		tdKeys = append(tdKeys, num)
 	}
-
 	slices.SortFunc(tdKeys, func(a, b int) int { return b - a })
 	for _, n := range tdKeys {
 		*streaks = slices.Delete(*streaks, n, n+1)
 	}
 }
 
-func (c *config) RunAsync() string {
+func (c *config) Run() string {
 	streaks := make([]singleThreadStreak, 0)
 	err := c.ap.FPSTicks(func() bool {
 		if !c.paused {
@@ -183,7 +181,7 @@ func (c *config) RunAsync() string {
 	return ""
 }
 
-func (c *config) Run(ctx context.Context) string {
+func (c *config) RunAsync(ctx context.Context) string {
 	maxProcs := runtime.GOMAXPROCS(-1)
 	err := c.ap.FPSTicks(func() bool {
 		if !c.paused {
