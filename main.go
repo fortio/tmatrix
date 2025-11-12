@@ -40,7 +40,7 @@ func (c *config) resizeConfigure() {
 }
 
 func main() {
-	maxProcs := int32(runtime.GOMAXPROCS(-1))
+	maxProcs := (runtime.GOMAXPROCS(-1))
 	fpsFlag := flag.Float64("fps", 60., "adjust the frames per second")
 	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
 	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
@@ -48,6 +48,7 @@ func main() {
 	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag}
 	ctx, cancel := context.WithCancel(context.Background())
 	hits, newStreaks := 0, 0
+	var errorMessage string
 	c.ap.HideCursor()
 	defer func() {
 		c.ap.ClearScreen()
@@ -55,27 +56,32 @@ func main() {
 		c.ap.MoveCursor(0, 0)
 		c.ap.Restore()
 		cancel()
+		fmt.Println(errorMessage)
 	}()
+
 	c.ap.OnResize = func() error {
-		c.ap.Open()
-		c.ap.GetSize()
 		c.ap.ClearScreen()
 		c.resizeConfigure()
 		return nil
 	}
+	err := c.ap.Open()
+	if err != nil {
+		errorMessage = ("can't open")
+	}
+
 	_ = c.ap.OnResize()
 	c.ap.SyncBackgroundColor()
-	c.ap.FPSTicks(func() bool {
+	err = c.ap.FPSTicks(func() bool {
 		select {
-		case streak := <-c.matrix.streaks:
+		case streakTick := <-c.matrix.streaks:
 			hits++
-			c.cells[streak.x][streak.y].shade = BrightGreen
-			c.cells[streak.x][streak.y].char = streak.char
+			c.cells[streakTick.x][streakTick.y].shade = BrightGreen
+			c.cells[streakTick.x][streakTick.y].char = streakTick.char
 		default:
 		}
 		c.shadeCells()
-		num := int(rand.Int32N(100))
-		if num <= c.freq && c.matrix.streaksActive.Load() < maxProcs {
+		num := int(rand.Int32N(100)) //nolint:gosec //good enough for random effect
+		if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
 			c.matrix.newStreak(ctx, c.speed)
 			newStreaks++
 		}
@@ -84,7 +90,9 @@ func main() {
 		}
 		return true
 	})
-	fmt.Println(len(c.matrix.streaks))
+	if err != nil {
+		errorMessage = fmt.Sprintf("error calling fpsticks: %s", err)
+	}
 }
 
 func (c *config) shadeCells() {

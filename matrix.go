@@ -19,8 +19,8 @@ type matrix struct {
 }
 
 func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
-	s := streak{rand.Intn(m.maxX), rand.Intn(m.maxY), rune(rand.Intn(128) + 8)}
-	speed := rand.Intn(100)
+	s := streak{rand.Intn(m.maxX), rand.Intn(m.maxY), rune(rand.Intn(128) + 8)} //nolint:gosec // good enough for random effect
+	speed := rand.Intn(100)                                                     //nolint:gosec // good enough for random effect
 	timeBetween := max(time.Duration(speed*int(time.Millisecond)/speedDividend), 10)
 	m.streaksActive.Add(1)
 	go func() {
@@ -37,7 +37,8 @@ func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 				if s.x >= m.maxX {
 					return
 				}
-				s.char = rune(rand.Intn(127-33) + 33) // number between 33 and 126 = nice ascii char
+				// number between 33 and 126 = nice ascii char
+				s.char = rune(rand.Intn(127-33) + 33) //nolint:gosec // good enough for random effect
 				m.streaks <- s
 			case <-ctx.Done():
 				return
