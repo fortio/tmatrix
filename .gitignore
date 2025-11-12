@@ -1,0 +1,21 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+.history
+# Go workspace file
+go.work
+go.work.sum
+# Workflow/build related:
+.goreleaser.yaml
+NAME
+# Other grol/fortio/...
+.gr
+*.pprof
+*.json
+.golangci.yml
+# macos
+.DS_Store
