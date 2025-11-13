@@ -63,17 +63,13 @@ func main() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	var errorMessage string
-	err := c.ap.Open()
-	if err != nil {
-		errorMessage = ("can't open")
-	}
 	c.ap.HideCursor()
 	c.ap.OnResize = func() error {
 		c.ap.ClearScreen()
 		c.resizeConfigure()
 		return nil
 	}
-	err = c.ap.Open()
+	err := c.ap.Open()
 	defer func() {
 		c.ap.ShowCursor()
 		c.ap.MoveCursor(0, 0)
