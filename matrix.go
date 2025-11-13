@@ -48,8 +48,8 @@ func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 		for {
 			select {
 			case <-ticker.C:
-				s.x++
-				if s.x >= m.maxX {
+				s.y++
+				if s.y >= m.maxY {
 					return
 				}
 				s.char = getRandomRune(m.ascii)
@@ -74,8 +74,8 @@ func (sts *singleThreadStreak) newChar(ascii bool) {
 func (m *matrix) newSingleThreadedStreak() singleThreadStreak {
 	s := singleThreadStreak{
 		chars:       []rune{getRandomRune(m.ascii)},
-		x:           0, // TODO: fix x/y swap.
-		y:           randomNum(m.maxY),
+		x:           randomNum(m.maxX),
+		y:           0,
 		doneGrowing: false,
 	}
 	return s
