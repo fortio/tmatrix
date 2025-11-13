@@ -93,8 +93,13 @@ func main() {
 func (c *config) shadeCells() {
 	for i, row := range c.cells[:len(c.cells)-1] {
 		for j, cell := range row[:len(row)-1] {
+			// Skip cells that have never been initialized (char is 0)
+			if cell.char == 0 {
+				continue
+			}
 			if cell.shade.G <= 35 {
 				c.ap.WriteAt(j, i, " ")
+				c.cells[i][j].char = 0 // Mark as cleared
 				continue
 			}
 			if cell.shade.B > 0 {
@@ -127,7 +132,7 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 		}
 		if s.x < c.ap.H {
 			c.ap.WriteFg(White.Color())
-			c.ap.MoveCursor(s.y, s.x)
+			c.ap.MoveCursor(s.y, s.x) // TODO: x and y axis are swapped! fix me (all over)
 			c.ap.WriteRune(s.chars[lengthChars-1])
 		}
 		for j := lengthChars - 1; j > -1; j-- {
