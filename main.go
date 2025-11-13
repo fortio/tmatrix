@@ -102,8 +102,13 @@ func main() {
 func (c *config) shadeCells() {
 	for i, row := range c.cells[:len(c.cells)-1] {
 		for j, cell := range row[:len(row)-1] {
+			// Skip cells that have never been initialized (char is 0)
+			if cell.char == 0 {
+				continue
+			}
 			if cell.shade.G <= 35 {
 				c.ap.WriteAt(j, i, " ")
+				c.cells[i][j].char = 0 // Mark as cleared
 				continue
 			}
 			if cell.shade.B > 0 {

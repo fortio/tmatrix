@@ -31,8 +31,9 @@ func getRandomRune(ascii bool) rune {
 
 func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 	s := streak{
-		randomNum(m.maxX), randomNum(m.maxY),
-		getRandomRune(m.ascii),
+		x:    randomNum(m.maxX),
+		y:    randomNum(m.maxY),
+		char: getRandomRune(m.ascii),
 	}
 	speed := randomNum(100)
 	timeBetween := max(time.Duration(speed*int(time.Millisecond)/speedDividend), 10)
