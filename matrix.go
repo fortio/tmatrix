@@ -31,8 +31,9 @@ func getRandomRune(ascii bool) rune {
 
 func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 	s := streak{
-		randomNum(m.maxX), randomNum(m.maxY),
-		getRandomRune(m.ascii),
+		x:    randomNum(m.maxX),
+		y:    randomNum(m.maxY),
+		char: getRandomRune(m.ascii),
 	}
 	speed := randomNum(100)
 	timeBetween := max(time.Duration(speed*int(time.Millisecond)/speedDividend), 10)
@@ -72,10 +73,10 @@ func (sts *singleThreadStreak) newChar(ascii bool) {
 
 func (m *matrix) newSingleThreadedStreak() singleThreadStreak {
 	s := singleThreadStreak{
-		[]rune{getRandomRune(m.ascii)},
-		0, randomNum(m.maxY),
-		// randomNum(int32(m.maxX)), randomNum(int32(m.maxY)), //nolint:gosec // Only would overflow if terminal size is massive
-		false,
+		chars:       []rune{getRandomRune(m.ascii)},
+		x:           0, // how come?
+		y:           randomNum(m.maxY),
+		doneGrowing: false,
 	}
 	return s
 }
