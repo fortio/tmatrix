@@ -15,12 +15,24 @@ type matrix struct {
 	maxX, maxY    int
 	streaks       chan (streak)
 	streaksActive atomic.Int32
+	ascii         bool
+}
+
+func getRandomRune(ascii bool) rune {
+	if ascii {
+		// number between 33 and 126 = nice ascii char
+		return randomNum32(127-33) + int32(33)
+	}
+	// katakana
+	start := int32(0x30A0)
+	end := int32(0x30FF)
+	return start + randomNum32(end-start)
 }
 
 func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 	s := streak{
-		randomNum(int32(m.maxX)), randomNum(int32(m.maxY)), //nolint:gosec // Only would overflow if terminal size is massive
-		rune(randomNum(128) + 8),
+		randomNum(m.maxX), randomNum(m.maxY),
+		getRandomRune(m.ascii),
 	}
 	speed := randomNum(100)
 	timeBetween := max(time.Duration(speed*int(time.Millisecond)/speedDividend), 10)
@@ -35,12 +47,11 @@ func (m *matrix) newStreak(ctx context.Context, speedDividend int) {
 		for {
 			select {
 			case <-ticker.C:
-				s.x++
-				if s.x >= m.maxX {
+				s.y++
+				if s.y >= m.maxY {
 					return
 				}
-				// number between 33 and 126 = nice ascii char
-				s.char = rune(randomNum(127-33) + 33)
+				s.char = getRandomRune(m.ascii)
 				m.streaks <- s
 			case <-ctx.Done():
 				return
@@ -55,16 +66,16 @@ type singleThreadStreak struct {
 	doneGrowing bool
 }
 
-func (sts *singleThreadStreak) newChar() {
-	sts.chars = append(sts.chars, rune(randomNum(127-33)+33))
+func (sts *singleThreadStreak) newChar(ascii bool) {
+	sts.chars = append(sts.chars, getRandomRune(ascii))
 }
 
 func (m *matrix) newSingleThreadedStreak() singleThreadStreak {
 	s := singleThreadStreak{
-		[]rune{rune(randomNum(128) + 8)},
-		0, randomNum(int32(m.maxY)), //nolint:gosec // Only would overflow if terminal size is massive
-		// randomNum(int32(m.maxX)), randomNum(int32(m.maxY)), //nolint:gosec // Only would overflow if terminal size is massive
-		false,
+		chars:       []rune{getRandomRune(m.ascii)},
+		x:           randomNum(m.maxX),
+		y:           0,
+		doneGrowing: false,
 	}
 	return s
 }
