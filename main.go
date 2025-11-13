@@ -71,11 +71,11 @@ func main() {
 		return nil
 	}
 	err := c.ap.Open()
+	c.ap.SyncBackgroundColor()
 	if err != nil {
 		errorMessage = ("can't open")
 	}
 	_ = c.ap.OnResize()
-	c.ap.SyncBackgroundColor()
 	if c.fade {
 		errorMessage = c.RunAsync(ctx)
 		return
