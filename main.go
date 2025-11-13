@@ -188,22 +188,12 @@ func (c *config) RunDirect() string {
 	err := c.ap.FPSTicks(func() bool {
 		if !c.paused {
 			c.drawAndIncrement(&streaks)
+			num := randomNum(100)
+			if num < c.freq {
+				streaks = append(streaks, c.matrix.newSingleThreadedStreak())
+			}
 		}
-		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
-			return false
-		}
-		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
-			c.paused = !c.paused
-			return true
-		}
-		if c.paused {
-			return true
-		}
-		num := randomNum(100)
-		if num < c.freq {
-			streaks = append(streaks, c.matrix.newSingleThreadedStreak())
-		}
-		return true
+		return c.handleKeys()
 	})
 	if err != nil {
 		return fmt.Sprintf("error calling fpsticks: %s", err)
