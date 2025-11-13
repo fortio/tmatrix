@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"slices"
 
+	"fortio.org/cli"
 	"fortio.org/terminal/ansipixels"
 	"fortio.org/terminal/ansipixels/tcolor"
 )
@@ -20,6 +21,7 @@ type config struct {
 	speed  int
 	fade   bool
 	paused bool
+	ascii  bool
 }
 
 type cell struct {
@@ -33,7 +35,6 @@ var (
 )
 
 func (c *config) resizeConfigure() {
-	*c = config{ap: c.ap, matrix: matrix{streaks: make(chan streak)}, cells: nil, freq: c.freq, speed: c.speed, fade: c.fade}
 	c.matrix.maxX = c.ap.H
 	c.matrix.maxY = c.ap.W
 	c.cells = make([][]cell, c.matrix.maxX+1)
@@ -44,39 +45,49 @@ func (c *config) resizeConfigure() {
 
 func main() {
 	fpsFlag := flag.Float64("fps", 60., "adjust the frames per second")
-	freqFlag := flag.Int("freq", 2, "adjust the percent chance each frame that a new column is spawned in")
+	freqFlag := flag.Int("freq", 100, "adjust the percent chance each frame that a new column is spawned in")
 	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks")
 	fadeFlag := flag.Bool("fade", false, "toggle whether the letters will fade away")
-	flag.Parse()
-	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag, fade: *fadeFlag}
+	flagASCII := flag.Bool("ascii", false, "use only ascii characters")
+	cli.Main()
+	c := config{
+		ap:    ansipixels.NewAnsiPixels(*fpsFlag),
+		freq:  *freqFlag,
+		speed: *speedFlag,
+		fade:  *fadeFlag,
+		ascii: *flagASCII,
+		matrix: matrix{
+			streaks: make(chan streak),
+			ascii:   *flagASCII,
+		},
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	// hits, newStreaks := 0, 0
 	var errorMessage string
+	err := c.ap.Open()
+	if err != nil {
+		errorMessage = ("can't open")
+	}
 	c.ap.HideCursor()
 	defer func() {
-		c.ap.ClearScreen()
 		c.ap.ShowCursor()
 		c.ap.MoveCursor(0, 0)
-		c.ap.Restore()
 		cancel()
+		c.ap.Restore()
 		fmt.Println(errorMessage)
 	}()
+	c.ap.SyncBackgroundColor()
 	c.ap.OnResize = func() error {
 		c.ap.ClearScreen()
 		c.resizeConfigure()
 		return nil
 	}
-	err := c.ap.Open()
-	if err != nil {
-		errorMessage = ("can't open")
-	}
 	_ = c.ap.OnResize()
-	c.ap.SyncBackgroundColor()
 	if !c.fade {
-		errorMessage = c.RunAsync()
+		errorMessage = c.RuneDirect()
 		return
 	}
-	errorMessage = c.Run(ctx)
+	errorMessage = c.RunGoRoutines(ctx)
 }
 
 func (c *config) shadeCells() {
@@ -98,8 +109,12 @@ func (c *config) shadeCells() {
 	}
 }
 
-func randomNum(maxValue int32) int {
-	return int(rand.Int32N(maxValue)) //nolint:gosec //good enough for random effect
+func randomNum32(maxValue int32) int32 {
+	return rand.Int32N(maxValue) //nolint:gosec // good enough for random effect
+}
+
+func randomNum(maxValue int) int {
+	return rand.IntN(maxValue) //nolint:gosec // good enough for random effect
 }
 
 func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
@@ -137,7 +152,7 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 			c.ap.WriteRune(char)
 		}
 		s.x++
-		s.newChar()
+		s.newChar(c.ascii)
 		if s.doneGrowing {
 			s.chars = s.chars[1:]
 		}
@@ -155,7 +170,7 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 	}
 }
 
-func (c *config) RunAsync() string {
+func (c *config) RuneDirect() string {
 	streaks := make([]singleThreadStreak, 0)
 	err := c.ap.FPSTicks(func() bool {
 		if !c.paused {
@@ -172,7 +187,7 @@ func (c *config) RunAsync() string {
 			return true
 		}
 		num := randomNum(100)
-		if num <= c.freq {
+		if num < c.freq {
 			streaks = append(streaks, c.matrix.newSingleThreadedStreak())
 		}
 		return true
@@ -183,7 +198,7 @@ func (c *config) RunAsync() string {
 	return ""
 }
 
-func (c *config) Run(ctx context.Context) string {
+func (c *config) RunGoRoutines(ctx context.Context) string {
 	maxProcs := runtime.GOMAXPROCS(-1)
 	err := c.ap.FPSTicks(func() bool {
 		if !c.paused {
@@ -195,10 +210,11 @@ func (c *config) Run(ctx context.Context) string {
 			}
 			c.shadeCells()
 			num := randomNum(100)
-			if num <= c.freq && int(c.matrix.streaksActive.Load()) < maxProcs {
+			if num < c.freq && int(c.matrix.streaksActive.Load()) < maxProcs { // !
 				c.matrix.newStreak(ctx, c.speed)
 			}
 		}
+		// TODO: refactor copy pasta: c.handleKeys() or some such
 		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
 			c.paused = !c.paused
 			return true
