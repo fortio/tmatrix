@@ -33,7 +33,6 @@ var (
 )
 
 func (c *config) resizeConfigure() {
-	*c = config{ap: c.ap, matrix: matrix{streaks: make(chan streak)}, cells: nil, freq: c.freq, speed: c.speed, fade: c.fade}
 	c.matrix.maxX = c.ap.H
 	c.matrix.maxY = c.ap.W
 	c.cells = make([][]cell, c.matrix.maxX+1)
@@ -48,7 +47,13 @@ func main() {
 	speedFlag := flag.Int("speed", 1, "adjust the speed of the green streaks - only affects speed when -fade flag is used")
 	fadeFlag := flag.Bool("fade", false, "toggle whether the letters will fade away")
 	flag.Parse()
-	c := config{ap: ansipixels.NewAnsiPixels(*fpsFlag), freq: *freqFlag, speed: *speedFlag, fade: *fadeFlag}
+	c := config{
+		ap:     ansipixels.NewAnsiPixels(*fpsFlag),
+		freq:   *freqFlag,
+		speed:  *speedFlag,
+		fade:   *fadeFlag,
+		matrix: matrix{streaks: make(chan streak)},
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	var errorMessage string
 	c.ap.HideCursor()
