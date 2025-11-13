@@ -74,7 +74,7 @@ func (sts *singleThreadStreak) newChar(ascii bool) {
 func (m *matrix) newSingleThreadedStreak() singleThreadStreak {
 	s := singleThreadStreak{
 		chars:       []rune{getRandomRune(m.ascii)},
-		x:           0, // how come?
+		x:           0, // TODO: fix x/y swap.
 		y:           randomNum(m.maxY),
 		doneGrowing: false,
 	}
