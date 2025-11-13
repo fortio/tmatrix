@@ -65,7 +65,8 @@ func main() {
 	var errorMessage string
 	err := c.ap.Open()
 	if err != nil {
-		errorMessage = ("can't open")
+		errorMessage = err.Error()
+		return
 	}
 	c.ap.HideCursor()
 	defer func() {
@@ -79,10 +80,6 @@ func main() {
 		c.ap.ClearScreen()
 		c.resizeConfigure()
 		return nil
-	}
-	if err != nil {
-		errorMessage = err.Error()
-		return
 	}
 	c.ap.SyncBackgroundColor()
 	c.ap.OnResize = func() error {
