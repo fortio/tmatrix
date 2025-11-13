@@ -82,11 +82,6 @@ func main() {
 		return nil
 	}
 	c.ap.SyncBackgroundColor()
-	c.ap.OnResize = func() error {
-		c.ap.ClearScreen()
-		c.resizeConfigure()
-		return nil
-	}
 	_ = c.ap.OnResize()
 	if !c.fade {
 		errorMessage = c.RunDirect()
