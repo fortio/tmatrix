@@ -35,11 +35,11 @@ var (
 )
 
 func (c *config) resizeConfigure() {
-	c.matrix.maxX = c.ap.H
-	c.matrix.maxY = c.ap.W
-	c.cells = make([][]cell, c.matrix.maxX+1)
+	c.matrix.maxX = c.ap.W
+	c.matrix.maxY = c.ap.H
+	c.cells = make([][]cell, c.matrix.maxY+1)
 	for i := range c.cells {
-		c.cells[i] = make([]cell, c.matrix.maxY+1)
+		c.cells[i] = make([]cell, c.matrix.maxX+1)
 	}
 }
 
@@ -62,11 +62,11 @@ func main() {
 		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	// hits, newStreaks := 0, 0
 	var errorMessage string
 	err := c.ap.Open()
 	if err != nil {
-		errorMessage = ("can't open")
+		errorMessage = err.Error()
+		return
 	}
 	c.ap.HideCursor()
 	defer func() {
@@ -76,15 +76,15 @@ func main() {
 		c.ap.Restore()
 		fmt.Println(errorMessage)
 	}()
-	c.ap.SyncBackgroundColor()
 	c.ap.OnResize = func() error {
 		c.ap.ClearScreen()
 		c.resizeConfigure()
 		return nil
 	}
+	c.ap.SyncBackgroundColor()
 	_ = c.ap.OnResize()
 	if !c.fade {
-		errorMessage = c.RuneDirect()
+		errorMessage = c.RunDirect()
 		return
 	}
 	errorMessage = c.RunGoRoutines(ctx)
@@ -130,9 +130,9 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 		if lengthChars > 5 && randomNum(20) <= 1 {
 			s.doneGrowing = true
 		}
-		if s.x < c.ap.H {
+		if s.y < c.ap.H {
 			c.ap.WriteFg(White.Color())
-			c.ap.MoveCursor(s.y, s.x) // TODO: x and y axis are swapped! fix me (all over)
+			c.ap.MoveCursor(s.x, s.y)
 			c.ap.WriteRune(s.chars[lengthChars-1])
 		}
 		for j := lengthChars - 1; j > -1; j-- {
@@ -141,22 +141,22 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 			overflowCheck := min(max(0, lengthChars-j), 255)
 			clr.G -= uint8(overflowCheck) //nolint:gosec // see line above
 			if clr.G < 35 {
-				c.ap.MoveCursor(s.y, s.x-(lengthChars-j)-1)
+				c.ap.MoveCursor(s.x, s.y-(lengthChars-j)-1)
 				c.ap.WriteFg(clr.Color())
 				c.ap.WriteRune(' ')
-				if s.x-(lengthChars-j)-1 >= c.ap.H {
+				if s.y-(lengthChars-j)-1 >= c.ap.H {
 					toDelete[i] = true
 				}
 				continue
 			}
-			if s.x-(lengthChars-j)-1 >= c.ap.H || s.x-1-(lengthChars-j) < 0 || s.x-j-1 >= c.ap.H {
+			if s.y-(lengthChars-j)-1 >= c.ap.H || s.y-1-(lengthChars-j) < 0 || s.y-j-1 >= c.ap.H {
 				continue
 			}
-			c.ap.MoveCursor(s.y, s.x-j-1)
+			c.ap.MoveCursor(s.x, s.y-j-1)
 			c.ap.WriteFg(clr.Color())
 			c.ap.WriteRune(char)
 		}
-		s.x++
+		s.y++
 		s.newChar(c.ascii)
 		if s.doneGrowing {
 			s.chars = s.chars[1:]
@@ -168,34 +168,23 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 	for num := range toDelete {
 		tdKeys = append(tdKeys, num)
 	}
-
 	slices.SortFunc(tdKeys, func(a, b int) int { return b - a })
 	for _, n := range tdKeys {
 		*streaks = slices.Delete(*streaks, n, n+1)
 	}
 }
 
-func (c *config) RuneDirect() string {
+func (c *config) RunDirect() string {
 	streaks := make([]singleThreadStreak, 0)
 	err := c.ap.FPSTicks(func() bool {
 		if !c.paused {
 			c.drawAndIncrement(&streaks)
+			num := randomNum(100)
+			if num < c.freq {
+				streaks = append(streaks, c.matrix.newSingleThreadedStreak())
+			}
 		}
-		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
-			return false
-		}
-		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
-			c.paused = !c.paused
-			return true
-		}
-		if c.paused {
-			return true
-		}
-		num := randomNum(100)
-		if num < c.freq {
-			streaks = append(streaks, c.matrix.newSingleThreadedStreak())
-		}
-		return true
+		return c.handleKeys()
 	})
 	if err != nil {
 		return fmt.Sprintf("error calling fpsticks: %s", err)
@@ -219,18 +208,25 @@ func (c *config) RunGoRoutines(ctx context.Context) string {
 				c.matrix.newStreak(ctx, c.speed)
 			}
 		}
-		// TODO: refactor copy pasta: c.handleKeys() or some such
-		if len(c.ap.Data) > 0 && (c.ap.Data[0] == 'p' || c.ap.Data[0] == ' ') {
-			c.paused = !c.paused
-			return true
-		}
-		if len(c.ap.Data) > 0 && c.ap.Data[0] == 'q' {
-			return false
-		}
-		return true
+		return c.handleKeys()
 	})
 	if err != nil {
 		return fmt.Sprintf("error calling fpsticks: %s", err)
 	}
 	return ""
+}
+
+func (c *config) handleKeys() bool {
+	if len(c.ap.Data) == 0 {
+		return true
+	}
+	switch c.ap.Data[0] {
+	case ' ', 'p', 'P':
+		c.paused = !c.paused
+		return true
+	case 'q', 'Q':
+		return false
+	default:
+		return true
+	}
 }
