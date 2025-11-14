@@ -141,10 +141,7 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 			overflowCheck := min(max(0, lengthChars-j), 255)
 			clr.G -= uint8(overflowCheck) //nolint:gosec // see line above
 			if clr.G < 35 {
-				c.ap.MoveCursor(s.x, s.y-(lengthChars-j)-1)
-				c.ap.WriteFg(clr.Color())
-				c.ap.WriteRune(' ')
-				if s.y-(lengthChars-j)-1 >= c.ap.H {
+				if s.y-(lengthChars-j)-1 > c.ap.H {
 					toDelete[i] = true
 				}
 				continue
