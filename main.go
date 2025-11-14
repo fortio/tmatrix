@@ -135,24 +135,21 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 			c.ap.MoveCursor(s.x, s.y)
 			c.ap.WriteRune(s.chars[lengthChars-1])
 		}
-		for j := lengthChars - 1; j > -1; j-- {
+		for j := 1; j < lengthChars; j++ {
 			char := s.chars[lengthChars-j-1]
 			clr := BrightGreen
 			overflowCheck := min(max(0, lengthChars-j), 255)
 			clr.G -= uint8(overflowCheck) //nolint:gosec // see line above
 			if clr.G < 35 {
-				c.ap.MoveCursor(s.x, s.y-(lengthChars-j)-1)
-				c.ap.WriteFg(clr.Color())
-				c.ap.WriteRune(' ')
-				if s.y-(lengthChars-j)-1 >= c.ap.H {
+				if s.y-(lengthChars-j)-1 > c.ap.H {
 					toDelete[i] = true
 				}
 				continue
 			}
-			if s.y-(lengthChars-j)-1 >= c.ap.H || s.y-1-(lengthChars-j) < 0 || s.y-j-1 >= c.ap.H {
+			if s.y-j-1 >= c.ap.H {
 				continue
 			}
-			c.ap.MoveCursor(s.x, s.y-j-1)
+			c.ap.MoveCursor(s.x, s.y-j)
 			c.ap.WriteFg(clr.Color())
 			c.ap.WriteRune(char)
 		}
