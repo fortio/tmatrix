@@ -98,7 +98,7 @@ func (c *config) shadeCells() {
 				continue
 			}
 			if cell.shade.G <= 35 {
-				c.ap.WriteAt(j, i, " ")
+				c.ap.WriteAt(i, j, " ")
 				c.cells[i][j].char = 0 // Mark as cleared
 				continue
 			}
