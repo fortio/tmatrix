@@ -135,7 +135,7 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 			c.ap.MoveCursor(s.x, s.y)
 			c.ap.WriteRune(s.chars[lengthChars-1])
 		}
-		for j := lengthChars - 1; j > -1; j-- {
+		for j := range lengthChars {
 			char := s.chars[lengthChars-j-1]
 			clr := BrightGreen
 			overflowCheck := min(max(0, lengthChars-j), 255)
