@@ -37,9 +37,9 @@ var (
 func (c *config) resizeConfigure() {
 	c.matrix.maxX = c.ap.W
 	c.matrix.maxY = c.ap.H
-	c.cells = make([][]cell, c.matrix.maxY+1)
+	c.cells = make([][]cell, c.matrix.maxX+1)
 	for i := range c.cells {
-		c.cells[i] = make([]cell, c.matrix.maxX+1)
+		c.cells[i] = make([]cell, c.matrix.maxY+1)
 	}
 }
 
@@ -108,7 +108,7 @@ func (c *config) shadeCells() {
 			}
 			c.cells[i][j].shade.G--
 			c.ap.WriteFg(c.cells[i][j].shade.Color())
-			c.ap.MoveCursor(j, i)
+			c.ap.MoveCursor(i, j)
 			c.ap.WriteRune(cell.char)
 		}
 	}
