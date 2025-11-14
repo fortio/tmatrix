@@ -146,7 +146,7 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 				}
 				continue
 			}
-			if s.y-1-(lengthChars-j) < 0 || s.y-j-1 >= c.ap.H {
+			if s.y-j-1 >= c.ap.H {
 				continue
 			}
 			c.ap.MoveCursor(s.x, s.y-j-1)
