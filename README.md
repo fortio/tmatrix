@@ -15,6 +15,7 @@ Or just run
 ```
 CGO_ENABLED=0 go install fortio.org/tmatrix@latest  # to install (in ~/go/bin typically) or just
 CGO_ENABLED=0 go run fortio.org/tmatrix@latest  # to run without install
+
 ```
 
 or
