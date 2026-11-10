@@ -139,7 +139,7 @@ func (c *config) drawAndIncrement(streaks *[]singleThreadStreak) {
 			char := s.chars[lengthChars-j-1]
 			clr := BrightGreen
 			overflowCheck := min(max(0, lengthChars-j), 255)
-			clr.G -= uint8(overflowCheck) //nolint:gosec // see line above
+			clr.G -= uint8(overflowCheck)
 			if clr.G < 35 {
 				if s.y-(lengthChars-j)-1 > c.ap.H {
 					toDelete[i] = true
