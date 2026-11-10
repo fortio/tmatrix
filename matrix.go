@@ -13,7 +13,7 @@ type streak struct {
 
 type matrix struct {
 	maxX, maxY    int
-	streaks       chan (streak)
+	streaks       chan streak
 	streaksActive atomic.Int32
 	ascii         bool
 }
